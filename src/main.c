@@ -141,16 +141,104 @@ int main(){
 
     if (!fork()){ // this is the child process
       close(sockfd); // child doesn;t need a listener 
-      const char *response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 13\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        "Hello World!\n";
-      if (send(new_fd, response, strlen(response), 0) == -1){
-        perror("send");
+      char buf[4096];
+      memset(buf, 0, sizeof(buf));
+
+      int bytes_received = recv(new_fd, buf, sizeof(buf) - 1, 0);
+      if (bytes_received == -1) {
+          perror("recv");
+      } else {
+          // char request[10], path[256], version[16], host[50];
+          // sscanf(buf, "%9s %255s %15s %*s %49s", request, path, version, host);
+          // printf("Request: %s\n", request);
+          // printf("Path: %s\n", path);
+          // printf("Version: %s\n", version);
+          // printf("Host: %s\n", host);
+          printf("--- request ---\n%s\n--- end ---\n", buf);
+          char method[10], uri[256], host[50];
+          char* useragent = NULL;
+          char* saveptr; 
+          char* res; 
+          char* token = strtok_r(buf, "\r\n", &saveptr);
+          // Extracting the Method and the URI
+          char* tok1 = strtok_r(token, " ", &res);
+          strncpy(method, tok1, sizeof(method));
+          char* tok2 = strtok_r(NULL, " ", &res);
+          strncpy(uri, tok2, sizeof(uri));
+    
+          fflush(NULL);
+
+          token = strtok_r(NULL, "\r\n", &saveptr);
+          while(token!=NULL){
+            char* tok1 = strtok_r(token, ":", &res);
+
+            if(strncmp(tok1, "Host", 4) == 0){
+              strncpy(host, res, sizeof(host));
+            }
+            else if(strncmp(tok1, "User-Agent", 10) == 0){
+              useragent = calloc(strlen(res) + 1, sizeof(char));
+              strncpy(useragent, res, strlen(res) + 1);
+            }
+            token = strtok_r(NULL, "\r\n", &saveptr);
+          }
+          printf("Method:%s,\nURI:%s,\nHOST:%s,\nU-Agent:%s\n", method, uri, host, useragent);
+          // getting the file based on the URI
+          char* filename;
+          if(strncmp(uri, "/", 1)== 0){
+            filename = "index.html";
+          }
+          char temp[300];
+          
+          snprintf(temp, sizeof(temp), "html%s%s", uri, filename);
+          FILE* fptr;
+          printf("%s", temp);
+          fptr = fopen(temp,"r");
+          if (fptr == NULL) {
+              printf("The file is not opened.");
+              return 1;
+          }
+          // getitng the size of the file
+          fseek(fptr, 0, SEEK_END);
+          long file_size = ftell(fptr);
+          fseek(fptr, 0, SEEK_SET); // Reset to beginning
+          char* page_buf = calloc(file_size+1, sizeof(char));
+          if(page_buf == NULL){
+            printf("Could Allocate Memory to read from file");
+            fclose(fptr);
+            return 1;
+          }
+          fread(page_buf, sizeof(char), file_size, fptr);
+          page_buf[file_size] = 0;
+          fclose(fptr);
+
+          // create the response
+          char* response = calloc(file_size+300, sizeof(char));
+          snprintf(response, file_size+300,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: %ld\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "%s",
+            file_size, page_buf);
+
+          // send the response
+          if (send(new_fd, response, strlen(response), 0) == -1){
+            perror("send");
+          }
+          
+          fflush(NULL);
       }
+      // const char *response =
+      //   "HTTP/1.1 200 OK\r\n"
+      //   "Content-Type: text/plain\r\n"
+      //   "Content-Length: 13\r\n"
+      //   "Connection: close\r\n"
+      //   "\r\n"
+      //   "Hello World!\n";
+      // if (send(new_fd, response, strlen(response), 0) == -1){
+      //   perror("send");
+      // }
       close(new_fd);
       exit(0);
     }
