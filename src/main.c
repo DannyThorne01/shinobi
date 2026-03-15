@@ -14,6 +14,9 @@
 #include <unistd.h>      // fork()
 #include <signal.h>
 
+#include <gdal.h>
+#include <cpl_conv.h>  
+
 /*
   struct addrinfo {
       int               ai_flags;         // Input flags (AI_PASSIVE, AI_CANONNAME, etc.)
@@ -35,6 +38,8 @@
 */
 #define MY_PORT "3490"
 #define QUEUE_SIZE 20
+
+  
 
 void addr_to_str(struct sockaddr *addr, char *res){
   void* res_addr;
@@ -68,6 +73,7 @@ void sigchld_handler(int s)
 }
 
 int main(){
+  GDALAllRegister(); 
   int status;
   struct addrinfo hints = {}; //search criteria
   struct addrinfo *servinfo, *winner; // Results lists + best match
@@ -126,6 +132,8 @@ int main(){
     perror("sigaction");
     exit(1);
   }
+
+
   while(1){
     addr_size=  sizeof(struct sockaddr_storage);
 
@@ -146,99 +154,162 @@ int main(){
 
       int bytes_received = recv(new_fd, buf, sizeof(buf) - 1, 0);
       if (bytes_received == -1) {
+          close(new_fd);
           perror("recv");
-      } else {
-          // char request[10], path[256], version[16], host[50];
-          // sscanf(buf, "%9s %255s %15s %*s %49s", request, path, version, host);
-          // printf("Request: %s\n", request);
-          // printf("Path: %s\n", path);
-          // printf("Version: %s\n", version);
-          // printf("Host: %s\n", host);
-          printf("--- request ---\n%s\n--- end ---\n", buf);
-          char method[10], uri[256], host[50];
-          char* useragent = NULL;
-          char* saveptr; 
-          char* res; 
-          char* token = strtok_r(buf, "\r\n", &saveptr);
-          // Extracting the Method and the URI
-          char* tok1 = strtok_r(token, " ", &res);
-          strncpy(method, tok1, sizeof(method));
-          char* tok2 = strtok_r(NULL, " ", &res);
-          strncpy(uri, tok2, sizeof(uri));
-    
-          fflush(NULL);
+          exit(1);
+      } else{
+      // char request[10], path[256], version[16], host[50];
+      // sscanf(buf, "%9s %255s %15s %*s %49s", request, path, version, host);
+      // printf("Request: %s\n", request);
+      // printf("Path: %s\n", path);
+      // printf("Version: %s\n", version);
+      // printf("Host: %s\n", host);
+      printf("--- request ---\n%s\n--- end ---\n", buf);
+      char method[10], uri[256], host[50];
+      char* useragent = NULL;
+      char* saveptr; 
+      char* res; 
+      char* token = strtok_r(buf, "\r\n", &saveptr);
 
-          token = strtok_r(NULL, "\r\n", &saveptr);
-          while(token!=NULL){
-            char* tok1 = strtok_r(token, ":", &res);
+      // Extracting the Method and the URI
+      char* tok1 = strtok_r(token, " ", &res);
+      strncpy(method, tok1, sizeof(method));
+      char* tok2 = strtok_r(NULL, " ", &res);
+      strncpy(uri, tok2, sizeof(uri));
 
-            if(strncmp(tok1, "Host", 4) == 0){
-              strncpy(host, res, sizeof(host));
-            }
-            else if(strncmp(tok1, "User-Agent", 10) == 0){
-              useragent = calloc(strlen(res) + 1, sizeof(char));
-              strncpy(useragent, res, strlen(res) + 1);
-            }
-            token = strtok_r(NULL, "\r\n", &saveptr);
-          }
-          printf("Method:%s,\nURI:%s,\nHOST:%s,\nU-Agent:%s\n", method, uri, host, useragent);
-          // getting the file based on the URI
-          char* filename;
-          if(strncmp(uri, "/", 1)== 0){
-            filename = "index.html";
-          }
-          char temp[300];
-          
-          snprintf(temp, sizeof(temp), "html%s%s", uri, filename);
-          FILE* fptr;
-          printf("%s", temp);
-          fptr = fopen(temp,"r");
-          if (fptr == NULL) {
-              printf("The file is not opened.");
-              return 1;
-          }
-          // getitng the size of the file
-          fseek(fptr, 0, SEEK_END);
-          long file_size = ftell(fptr);
-          fseek(fptr, 0, SEEK_SET); // Reset to beginning
-          char* page_buf = calloc(file_size+1, sizeof(char));
-          if(page_buf == NULL){
-            printf("Could Allocate Memory to read from file");
-            fclose(fptr);
-            return 1;
-          }
-          fread(page_buf, sizeof(char), file_size, fptr);
-          page_buf[file_size] = 0;
-          fclose(fptr);
-
-          // create the response
-          char* response = calloc(file_size+300, sizeof(char));
-          snprintf(response, file_size+300,
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html\r\n"
-            "Content-Length: %ld\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "%s",
-            file_size, page_buf);
-
-          // send the response
-          if (send(new_fd, response, strlen(response), 0) == -1){
-            perror("send");
-          }
-          
-          fflush(NULL);
+      if(strncmp("GET", method,3) != 0 && strncmp("POST", method, 4) != 0){
+        const char *r405 = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        send(new_fd, r405, strlen(r405),0);
+        close(new_fd);
+        exit(1);
       }
-      // const char *response =
-      //   "HTTP/1.1 200 OK\r\n"
-      //   "Content-Type: text/plain\r\n"
-      //   "Content-Length: 13\r\n"
-      //   "Connection: close\r\n"
-      //   "\r\n"
-      //   "Hello World!\n";
-      // if (send(new_fd, response, strlen(response), 0) == -1){
-      //   perror("send");
-      // }
+
+      if(strstr(uri, "..")){
+        const char *r405 = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        send(new_fd, r405, strlen(r405),0);
+        close(new_fd);
+        exit(1);
+      }
+      if(strlen(uri) > 200){
+        const char *r405 = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        send(new_fd, r405, strlen(r405),0);
+        close(new_fd);
+        exit(1);
+      }  
+
+      fflush(NULL);
+
+      token = strtok_r(NULL, "\r\n", &saveptr);
+      while(token!=NULL){
+        char* tok1 = strtok_r(token, ":", &res);
+
+        if(strncmp(tok1, "Host", 4) == 0){
+          strncpy(host, res, sizeof(host));
+        }
+        else if(strncmp(tok1, "User-Agent", 10) == 0){
+          useragent = calloc(strlen(res) + 1, sizeof(char));
+          strncpy(useragent, res, strlen(res) + 1);
+        }
+        token = strtok_r(NULL, "\r\n", &saveptr);
+      }
+      printf("Method:%s,\nURI:%s,\nHOST:%s,\nU-Agent:%s\n", method, uri, host, useragent);
+
+      // getting the file based on the URI
+      char filepath[300];
+      FILE* fptr = NULL;
+      long file_size = 0;
+      char* page_buf = NULL;
+
+      if(strcmp(uri, "/")== 0){
+        snprintf(filepath, sizeof(filepath), "html/index.html");
+        fptr = fopen(filepath,"r");
+        if (fptr == NULL) {
+            printf("The file could not be opened. ");
+            return 1;
+        }
+        // getitng the size of the file
+        fseek(fptr, 0, SEEK_END);
+        file_size = ftell(fptr);
+        fseek(fptr, 0, SEEK_SET); // Reset to beginning
+
+        page_buf = calloc(file_size+1, sizeof(char));
+        if(page_buf == NULL){
+          printf("Could NOT Allocate Memory to read from file");
+          fclose(fptr);
+          return 1;
+        }
+        fread(page_buf, sizeof(char), file_size, fptr);
+        page_buf[file_size] = 0;
+        fclose(fptr);
+        // send the header
+        char header[300];
+        int hlen = snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\n"
+          "Content-Type: text/html\r\n"
+          "Content-Length: %ld\r\n"
+          "Connection: close\r\n"
+          "\r\n",
+          file_size);
+        send(new_fd, header, hlen ,0);
+
+        // send the raw file bytes using the file size
+        if (send(new_fd, page_buf, file_size, 0) == -1){
+          perror("Error Sending the Data");
+        }
+
+      }else{
+        char* res_params = NULL;
+        char* act_uri = strtok_r(uri, "?", &res_params);
+        snprintf(filepath, sizeof(filepath), "html%s", act_uri);
+        strtok_r(NULL, "=", &res_params);
+        double min_lon = atof(strtok_r(NULL, ",", &res_params));
+        double min_lat = atof(strtok_r(NULL, ",", &res_params));
+        double max_lon = atof(strtok_r(NULL, ",", &res_params));
+        double max_lat = atof(strtok_r(NULL, ",", &res_params));
+        printf("min_lon:%f,\nmin_lat:%f,\nmax_lon:%f,\nmax_lat:%f\n", 
+        min_lon, min_lat, max_lon, max_lat);
+        GDALDatasetH ds = GDALOpen(filepath, GA_ReadOnly);
+        if (ds == NULL) {
+            const char *r404 = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            send(new_fd, r404, strlen(r404),0);
+            close(new_fd);
+            exit(1);
+        }
+        GDALClose(ds);
+        fptr = fopen(filepath, "rb");
+        if (fptr == NULL){
+          const char *r404 = "HTTP/1.1 404 NOT Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+          send(new_fd, r404, strlen(r404),0);
+          free(useragent);
+          close(new_fd);
+          exit(1);
+        }
+        fseek(fptr, 0 , SEEK_END);
+        file_size = ftell(fptr);
+        fseek(fptr, 0, SEEK_SET);
+
+        page_buf = calloc(file_size, sizeof(char));
+        fread(page_buf, sizeof(char), file_size, fptr);
+        fclose(fptr);
+
+        char header[300];
+        int hlen = snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\n"
+          "Content-Type: image/tiff\r\n"
+          "Content-Length: %ld\r\n"
+          "Connection: close\r\n"
+          "\r\n",
+          file_size);
+        send(new_fd, header, hlen ,0);
+
+        // send the raw file bytes using the file size
+        if (send(new_fd, page_buf, file_size, 0) == -1){
+          perror("Error Sending the Data");
+        }
+      }
+      
+      fflush(NULL);
+      free(page_buf);
+      free(useragent);
+      }
       close(new_fd);
       exit(0);
     }

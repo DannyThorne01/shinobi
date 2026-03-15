@@ -25,3 +25,11 @@ add_compile_definitions(_POSIX_C_SOURCE=200112L)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(web_server PRIVATE -Wall -Wextra -Wpedantic -g)
 endif()
+
+find_package(GDAL REQUIRED)
+
+target_link_libraries(web_server GDAL::GDAL)
+
+# GDAL needs this - it uses C++ internally even though you call it from C
+# so link the C++ standard library too
+target_link_libraries(web_server stdc++)

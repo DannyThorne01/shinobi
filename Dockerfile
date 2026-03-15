@@ -1,6 +1,6 @@
 FROM gcc:latest
 # install additional tools like CMake and make
-RUN apt-get update && apt-get install -y cmake make
+RUN apt-get update && apt-get install -y cmake make libgdal-dev
 
 # set working directory inside the container
 WORKDIR /app
