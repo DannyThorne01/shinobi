@@ -3,7 +3,7 @@ build:
 	docker build -t web_server .
 
 run:
-	docker run --rm web_server
+	docker run --rm -p 3490:3490 web_server
 
 # Remove the Docker image
 clean:

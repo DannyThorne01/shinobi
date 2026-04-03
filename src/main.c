@@ -1,6 +1,6 @@
-#include "stdio.h"  // printf, fprintf
+#include <stdio.h>  // printf, fprintf
 #include <stdlib.h>      // exit()
-#include "string.h"      // memset()
+#include <string.h>     // memset()
 #include <errno.h>
 #include <arpa/inet.h>   // inet_ntop() - converts binary IP to string
 #include <netinet/in.h>  // sockaddr_in structures
@@ -88,7 +88,7 @@ int main(){
   // fill specifc boxes
   hints.ai_family = 0; // "Try everything both IPv4 and IPv6"
   hints.ai_socktype = SOCK_STREAM; // TCP please
-  hints.ai_flags = 0; // I'm a server
+  hints.ai_flags = AI_PASSIVE; // I'm a server
 
   if((status = getaddrinfo(NULL, MY_PORT, &hints, &servinfo)) != 0){
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
@@ -111,6 +111,7 @@ int main(){
     return 1;
   }
   // int bind(int sockfd, struct sockaddr *my_addr, int addrlen);
+  // bind it to the port we passed in to getaddrinfo():
   if (bind(sockfd, winner->ai_addr, winner->ai_addrlen) == -1){
     printf("bind: error");
     return 1;
@@ -225,7 +226,7 @@ int main(){
         fptr = fopen(filepath,"r");
         if (fptr == NULL) {
             printf("The file could not be opened. ");
-            return 1;
+            exit(1);
         }
         // getitng the size of the file
         fseek(fptr, 0, SEEK_END);
@@ -236,7 +237,7 @@ int main(){
         if(page_buf == NULL){
           printf("Could NOT Allocate Memory to read from file");
           fclose(fptr);
-          return 1;
+          exit(1);
         }
         fread(page_buf, sizeof(char), file_size, fptr);
         page_buf[file_size] = 0;

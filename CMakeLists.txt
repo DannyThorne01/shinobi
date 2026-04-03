@@ -19,7 +19,9 @@ add_executable(web_server ${SOURCES})
 target_include_directories(web_server PRIVATE src)
 
 # had to add this so networking functions work
-add_compile_definitions(_POSIX_C_SOURCE=200112L)
+# _DEFAULT_SOURCE re-enables BSD/GNU extensions (like SA_RESTART) that
+# _POSIX_C_SOURCE alone would hide
+add_compile_definitions(_POSIX_C_SOURCE=200112L _DEFAULT_SOURCE)
 
 # optional: enable warnings and debugging flags
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
