@@ -10,6 +10,10 @@ set(CMAKE_C_EXTENSIONS OFF)     # Enforce standard compliance
 # add source files
 set(SOURCES
     src/main.c
+    src/server.c
+    src/handler.c
+    src/http.c
+    src/utils.c
 )
 
 # create the executable
