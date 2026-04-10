@@ -141,7 +141,7 @@ void http_parse_latlon(char *query_string, Latlon *latlon) {
   char *lon;
   char *lat = strtok_r(query_string, "&", &lon);
   strtok_r(lat, "=", &lat);
-  strtok_r(lon, "=", &lon)
+  strtok_r(lon, "=", &lon);
   latlon->lat = atof(lat);
   latlon->lon = atof(lon);
   LOG_DEBUG("LatLon: lat=%f lon=%f", latlon->lat, latlon->lon);
